@@ -1,11 +1,17 @@
 const express = require('express')
+const morgan = require('morgan')
+
 const app = express()
 const configuration = require('config')
 
 const movieRoutes = require('./api/routes/movie')
 
+app.use(morgan('dev'))
 app.use(express.json())
+app.use(express.urlencoded({extended: false}))
 app.use(express.static('public'))
+app.use('/uploads', express.static('uploads'))
+
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*')
   res.setHeader('Content-Type', 'application/json')
