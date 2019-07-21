@@ -1,53 +1,129 @@
-let movies = [
-  { id: 1, name: 'John Wick', year: 2014, image: '' },
-  { id: 2, name: 'Avengers EndGame', year: 2019, image: '' },
-  { id: 3, name: 'Aquaman', year: 2018, image: '' }
-]
+const mongoose = require('mongoose')
+const Movie = require('../models/movie')
 
-exports.getAll = (req, res) => {
-  return res.status(200).json(movies)
-}
-
-exports.get = (req, res) => {
-  const id = req.params.id
-  const movie = movies.filter(movie => movie.id === parseInt(id, 10))
-
-  return res.status(200).json(movie)
-}
-
-exports.create = (req, res) => {
-  const { id, name, year } = req.body
-  const image = req.file.path
-  console.log(req.file)
-  movies.push({ id, name, year,image })
-  return res.status(200).json(movies)
-}
-
-exports.delete = (req, res) => {
-  const id = req.params.id
-  const deleted = movies.filter(movie => {
-    if (movie.id === parseInt(id, 10)) {
-      movies.splice(movies.indexOf(movie), 1)
-      return movie
+exports.getAll = async (req, res) => {
+  try {
+    const docs = await Movie.find().exec()
+    const result = {
+      count: docs.length,
+      movies: docs.map(doc => ({
+        _id: doc._id,
+        name: doc.name,
+        image: doc.image,
+        tickets: doc.tickets,
+        year: new Date(doc.year).getFullYear(),
+        request: {
+          type: 'GET',
+          url: `http://localhost:8080/api/v1/movies/${doc._id}`
+        }
+      }))
     }
-  })
-
-  if (deleted[0]) {
-    return res
-      .status(200)
-      .json({ message: `Deleted ${deleted[0].name} with id ${deleted[0].id}` })
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error })
   }
-  return res.status(422).json({ message: 'Could not delete that movie.' })
 }
 
-exports.update = (req, res) => {
+exports.get = async (req, res) => {
   const id = req.params.id
-  let bodyMovie = req.body
-  bodyMovie.id = id
-  movies.filter(movie => {
-    if (movie.id === parseInt(id, 10)) {
-      movies[movies.indexOf(movie)] = bodyMovie
-      return res.status(200).json(movies)
+  if (!id) {
+    return res.status(422).json({ message: 'Please provide an id' })
+  }
+  try {
+    const result = await Movie.findById(id)
+      .select('_id name year image')
+      .exec()
+    if (result) {
+      return res.status(200).json({
+        movie: result,
+        request: {
+          type: 'GET',
+          description: 'Get all movies',
+          url: 'http://localhost:8080/api/v1/movies'
+        }
+      })
     }
+    return res.status(404).json({ message: 'No valid movies found' })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error })
+  }
+}
+
+exports.create = async (req, res) => {
+  const movie = new Movie({
+    _id: new mongoose.Types.ObjectId(),
+    name: req.body.name,
+    year: req.body.year,
+    image: req.body.image,
+    tickets: [{ price: req.body.price, date: req.body.date }]
   })
+  try {
+    const result = await movie.save()
+    return res.status(201).json({
+      message: 'Created a movie',
+      createdMovie: {
+        name: result.name,
+        year: result.year,
+        image: result.image,
+        _id: result.id,
+        request: {
+          type: 'GET',
+          url: `http://localhost:8080/api/v1/movies/${result._id}`
+        }
+      }
+    })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error })
+  }
+}
+
+exports.delete = async (req, res) => {
+  const id = req.params.id
+
+  if (!id) {
+    return res.status(422).json({ message: 'Please provide an id' })
+  }
+  try {
+    const result = await Movie.remove({ _id: id }).exec()
+    return res.status(200).json({
+      message: 'Movie deleted',
+      request: {
+        type: 'POST',
+        url: 'http://localhost:8080/api/v1/movies',
+        data: { name: 'String', year: 'Number', image: 'String' }
+      }
+    })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error })
+  }
+}
+
+exports.update = async (req, res) => {
+  const id = req.params.id
+
+  if (!id) {
+    return res.status(422).json({ message: 'Please provide an id' })
+  }
+
+  const updateOpts = {}
+  for (const ops of Object.keys(req.body)) {
+    updateOpts[ops] = req.body[ops]
+  }
+  try {
+    const result = await Movie.update({ _id: id }, { $set: updateOpts }).exec()
+    return res.status(200).json({
+      message: 'Movie updated',
+      request: {
+        type: 'GET',
+        url: `http://localhost:8080/movies/${id}`
+      }
+    })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error })
+  }
 }
